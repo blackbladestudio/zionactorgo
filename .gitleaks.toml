@@ -1,0 +1,16 @@
+# 复用Gitleaks默认秘密检测，只豁免上游Base64测试中的固定JWT头部。
+# 路径和完整值必须同时匹配；不豁免整个文件、提交或其他测试值。
+title = "Public repository secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Fixed Base64 test header without payload, signature or authorization capability"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(^|/)extend/crypto/crypto_test\.go$''']
+regexes = ['''^eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9$''']
