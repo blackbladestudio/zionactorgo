@@ -1,0 +1,81 @@
+# 公开代码变动时扫描完整可见Git历史和当前文件；不上传扫描报告或使用发布凭据。
+# 检测配置的修改仍须独立审查，自动扫描不能代替业务资料与许可证检查。
+name: Public repository security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan history and working files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir=$(mktemp -d)
+          trap 'rm -rf -- "$tool_dir"' EXIT
+          curl --fail --location --retry 2 --max-time 120 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$tool_dir/gitleaks.tar.gz"
+          printf '%s  %s\n' 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb "$tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
+          git fetch --no-recurse-submodules origin '+refs/heads/*:refs/remotes/origin/*' --tags
+          "$tool_dir/gitleaks" git . --log-opts='--all --full-history' --config=.gitleaks.toml --redact=100 --no-banner
+          "$tool_dir/gitleaks" dir . --config=.gitleaks.toml --redact=100 --no-banner
+
+  dependency-scan:
+    name: dependency-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Use fixed patched Go compiler
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.26.11'
+          cache: false
+      - name: Reject known vulnerable dependency versions
+        shell: bash
+        env:
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOENV: 'off'
+        run: |
+          set -euo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          report=$(mktemp)
+          trap 'rm -f -- "$report"' EXIT
+          "$(go env GOPATH)/bin/govulncheck" -scan module -format json > "$report"
+          python3 - "$report" <<'PY'
+          import json, pathlib, sys
+          data = pathlib.Path(sys.argv[1]).read_text()
+          decoder = json.JSONDecoder()
+          records = []
+          while data.strip():
+              data = data.lstrip()
+              record, end = decoder.raw_decode(data)
+              records.append(record)
+              data = data[end:]
+          if not any('config' in r for r in records) or not any('SBOM' in r for r in records):
+              raise SystemExit('Incomplete vulnerability report')
+          count = sum('finding' in r for r in records)
+          print('Known dependency findings:', count)
+          raise SystemExit(1 if count else 0)
+          PY
