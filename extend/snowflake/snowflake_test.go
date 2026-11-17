@@ -1,7 +1,10 @@
+// 本文件验证雪花编号的构造边界、生成和格式转换；编号范围由当前NodeBits决定。
+// JSON错误比较保留具体类型和完整原输入检查，不直接比较含字节切片的error值。
 package csnowflake
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"strconv"
@@ -26,18 +29,19 @@ func TestPrintID(t *testing.T) {
 //******************************************************************************
 // General Test funcs
 
+// 允许当前配置中的首尾节点编号，拒绝负数和超出NodeBits范围的编号。
 func TestNewNode(t *testing.T) {
-
-	_, err := NewNode(1023)
-	if err != nil {
-		t.Fatalf("error creating NewNode, %s", err)
+	maxNodeID := int64(1<<NodeBits) - 1
+	for _, nodeID := range []int64{0, maxNodeID} {
+		if _, err := NewNode(nodeID); err != nil {
+			t.Fatalf("合法节点编号%d被拒绝：%v", nodeID, err)
+		}
 	}
-
-	_, err = NewNode(5000)
-	if err == nil {
-		t.Fatalf("no error creating NewNode, %s", err)
+	for _, nodeID := range []int64{-1, maxNodeID + 1} {
+		if _, err := NewNode(nodeID); err == nil {
+			t.Fatalf("非法节点编号%d没有被拒绝", nodeID)
+		}
 	}
-
 }
 
 // lazy check if Generate will create duplicate IDs
@@ -384,6 +388,7 @@ func TestMarshalsIntBytes(t *testing.T) {
 	}
 }
 
+// 合法JSON返回编号；不完整JSON保留语法错误类型及收到的完整字节，不触发error比较panic。
 func TestUnmarshalJSON(t *testing.T) {
 	tt := []struct {
 		json        string
@@ -392,15 +397,22 @@ func TestUnmarshalJSON(t *testing.T) {
 	}{
 		{`"13587"`, 13587, nil},
 		{`1`, 0, JSONSyntaxError{[]byte("1")}},
-		{`"invalid`, 0, JSONSyntaxError{[]byte("invalid")}},
+		{`"invalid`, 0, JSONSyntaxError{[]byte(`"invalid`)}},
 	}
 
 	for _, tc := range tt {
 		var id ID
 		err := id.UnmarshalJSON([]byte(tc.json))
 
-		if err != tc.expectedErr {
-			t.Fatalf("Expected to get error '%s' decoding JSON, but got '%s'", tc.expectedErr, err)
+		if tc.expectedErr == nil {
+			if err != nil {
+				t.Fatalf("合法JSON返回错误：%v", err)
+			}
+		} else {
+			var syntaxError JSONSyntaxError
+			if !errors.As(err, &syntaxError) || !bytes.Equal(syntaxError.original, []byte(tc.json)) {
+				t.Fatalf("语法错误未保留类型或完整原输入：%v", err)
+			}
 		}
 
 		if id != tc.expectedID {

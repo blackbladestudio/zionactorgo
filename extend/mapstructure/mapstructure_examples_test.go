@@ -1,3 +1,5 @@
+// 本文件以可执行示例核对Decode的完整输出；类型前缀使用本维护副本实际包名cmapstructure。
+// 示例仍核对全部字段和值，不修改解码实现或省略输出断言。
 package cmapstructure
 
 import (
@@ -32,7 +34,7 @@ func ExampleDecode() {
 
 	fmt.Printf("%#v", result)
 	// Output:
-	// mapstructure.Person{Name:"Mitchell", Age:91, Emails:[]string{"one", "two", "three"}, Extra:map[string]string{"twitter":"mitchellh"}}
+	// cmapstructure.Person{Name:"Mitchell", Age:91, Emails:[]string{"one", "two", "three"}, Extra:map[string]string{"twitter":"mitchellh"}}
 }
 
 func ExampleDecode_errors() {
@@ -141,7 +143,7 @@ func ExampleDecode_weaklyTypedInput() {
 	}
 
 	fmt.Printf("%#v", result)
-	// Output: mapstructure.Person{Name:"123", Age:42, Emails:[]string{}}
+	// Output: cmapstructure.Person{Name:"123", Age:42, Emails:[]string{}}
 }
 
 func ExampleDecode_tags() {
@@ -165,7 +167,7 @@ func ExampleDecode_tags() {
 
 	fmt.Printf("%#v", result)
 	// Output:
-	// mapstructure.Person{Name:"Mitchell", Age:91}
+	// cmapstructure.Person{Name:"Mitchell", Age:91}
 }
 
 func ExampleDecode_embeddedStruct() {
@@ -225,7 +227,7 @@ func ExampleDecode_remainingData() {
 
 	fmt.Printf("%#v", result)
 	// Output:
-	// mapstructure.Person{Name:"Mitchell", Age:91, Other:map[string]interface {}{"email":"mitchell@example.com"}}
+	// cmapstructure.Person{Name:"Mitchell", Age:91, Other:map[string]interface {}{"email":"mitchell@example.com"}}
 }
 
 func ExampleDecode_omitempty() {
